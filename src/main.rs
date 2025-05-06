@@ -1,6 +1,7 @@
 use clap::Parser;
 use image::{DynamicImage, ImageReader, Rgb};
 use std::fmt::{Display, Formatter};
+use std::path::Path;
 
 mod resizing;
 mod styling;
@@ -16,12 +17,14 @@ struct Args {
     /// Files to display.
     filenames: Vec<String>,
 
-    /// Optional display width.
-    #[clap(short, long, default_value = "80")]
-    width: u32,
+    /// Optional width to scale the image to before displaying it.
+    /// When height is also given, aspect ratio is not preserved.
+    /// When neither are given, a default width of 80 is used.
+    #[clap(short, long)]
+    width: Option<u32>,
 
-    /// Optional display height.
-    /// If specified, the image is stretched to that height.
+    /// Optional height to scale the image to before displaying it.
+    /// When width is also given, aspect ratio is not preserved.
     #[clap(short = 'y', long)]
     height: Option<u32>,
 
@@ -66,18 +69,11 @@ fn build_display_string(image: &DynamicImage, style: &Style) -> String {
     style.apply(&mut image)
 }
 
-fn display_image(
-    path: &str,
-    dimensions: (u32, Option<u32>),
-    style: &Style,
-    filter: Filter,
-) -> Result<(), Error> {
-    let reader = ImageReader::open(path).map_err(Error::IO)?;
-    let image = reader.decode().map_err(Error::Decode)?;
-    let image = resize(image, dimensions, filter);
-    let string = build_display_string(&image, style);
-    println!("{path}:\n{}", string);
-    Ok(())
+fn load_image(path: impl AsRef<Path>) -> Result<DynamicImage, Error> {
+    ImageReader::open(path)
+        .map_err(Error::IO)?
+        .decode()
+        .map_err(Error::Decode)
 }
 
 pub mod built_info {
@@ -96,11 +92,19 @@ fn main() {
     }
     let style = args.style;
     let filter = args.filter.unwrap_or_default();
-    let dim = (args.width, args.height);
+    let dim = match (args.width, args.height) {
+        (None, None) => (Some(80), None),
+        other => other,
+    };
     for filename in &args.filenames {
-        match display_image(filename, dim, &style, filter) {
-            Ok(_) => (),
-            Err(err) => println!("{filename}: {err}"),
-        }
+        let image = match load_image(filename) {
+            Ok(img) => img,
+            Err(err) => {
+                println!("{filename}: {err}");
+                continue;
+            }
+        };
+        let image = resize(image, dim, filter);
+        println!("{filename}:\n{}", build_display_string(&image, &style));
     }
 }

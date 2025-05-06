@@ -22,7 +22,7 @@ pub enum Filter {
 
 pub fn resize(
     image: DynamicImage,
-    (width, height): (u32, Option<u32>),
+    dim: (Option<u32>, Option<u32>),
     filter: Filter,
 ) -> DynamicImage {
     let filter = match filter {
@@ -32,8 +32,19 @@ pub fn resize(
         Filter::Gaussian => FilterType::Gaussian,
         Filter::Lanczos3 => FilterType::Lanczos3,
     };
-    let (w, h) = image.dimensions();
-    let scale = width as f64 / w as f64;
-    let height = height.unwrap_or((scale * h as f64) as u32);
-    image.resize_exact(width, height, filter)
+    let (img_width, img_height) = image.dimensions();
+    match dim {
+        (Some(width), None) => {
+            let scale = (width as f32) / (img_width as f32);
+            let height = (img_height as f32 * scale) as u32;
+            image.resize(width, height, filter)
+        }
+        (None, Some(height)) => {
+            let scale = (height as f32) / (img_height as f32);
+            let width = (img_width as f32 * scale) as u32;
+            image.resize(width, height, filter)
+        }
+        (Some(width), Some(height)) => image.resize_exact(width, height, filter),
+        _ => unreachable!("impossible dimensions for resize!"),
+    }
 }
