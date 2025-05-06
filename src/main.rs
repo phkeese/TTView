@@ -122,6 +122,10 @@ struct Args {
     /// Cannot be combined with another style.
     #[clap(short, long, group = "display_style")]
     gradient: Option<String>,
+
+    /// Print version info.
+    #[clap(short, long)]
+    version: bool,
 }
 
 #[derive(Debug)]
@@ -178,8 +182,16 @@ fn display_image(path: &str, width: u32, style: &Style, filter: Filter) -> Resul
     Ok(())
 }
 
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
 fn main() {
     let mut args = Args::parse();
+    if args.version {
+        let version = built_info::PKG_VERSION;
+        println!("ttview {}", version);
+    }
     if let Some(gradient) = args.gradient {
         let gradient = gradient.chars().collect();
         args.style = Some(Style::Gradient(gradient));
