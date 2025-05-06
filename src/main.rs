@@ -20,6 +20,11 @@ struct Args {
     #[clap(short, long, default_value = "80")]
     width: u32,
 
+    /// Optional display height.
+    /// If specified, the image is stretched to that height.
+    #[clap(short = 'y', long)]
+    height: Option<u32>,
+
     /// Optional filter to use for scaling.
     #[clap(short, long)]
     filter: Option<Filter>,
@@ -61,10 +66,15 @@ fn build_display_string(image: &DynamicImage, style: &Style) -> String {
     style.apply(&mut image)
 }
 
-fn display_image(path: &str, width: u32, style: &Style, filter: Filter) -> Result<(), Error> {
+fn display_image(
+    path: &str,
+    dimensions: (u32, Option<u32>),
+    style: &Style,
+    filter: Filter,
+) -> Result<(), Error> {
     let reader = ImageReader::open(path).map_err(Error::IO)?;
     let image = reader.decode().map_err(Error::Decode)?;
-    let image = resize(image, width, filter);
+    let image = resize(image, dimensions, filter);
     let string = build_display_string(&image, style);
     println!("{path}:\n{}", string);
     Ok(())
@@ -86,8 +96,9 @@ fn main() {
     }
     let style = args.style;
     let filter = args.filter.unwrap_or_default();
+    let dim = (args.width, args.height);
     for filename in &args.filenames {
-        match display_image(filename, args.width, &style, filter) {
+        match display_image(filename, dim, &style, filter) {
             Ok(_) => (),
             Err(err) => println!("{filename}: {err}"),
         }
