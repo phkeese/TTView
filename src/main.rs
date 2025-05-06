@@ -1,7 +1,85 @@
 use clap::Parser;
 use image::imageops::FilterType;
-use image::{DynamicImage, GenericImageView, ImageReader, Pixel, Rgba};
+use image::{DynamicImage, GenericImageView, ImageReader, Pixel as ImagePixel, Rgb};
 use std::fmt::{Display, Formatter};
+
+/// Single pixel value.
+type Pixel = Rgb<f32>;
+
+fn brightness(pixel: &Pixel) -> f32 {
+    0.299 * pixel.channels()[0] + 0.587 * pixel.channels()[1] + 0.114 * pixel.channels()[2]
+}
+
+/// Display style.
+#[derive(Debug, Default, Clone, clap::ValueEnum)]
+enum Style {
+    /// Default style, 24 bit color with upper half block character.
+    #[default]
+    Default,
+
+    /// Greyscale style, uses a weighted average for the final pixel value.
+    Greyscale,
+
+    /// Display in greyscale using a gradient.
+    #[clap(skip)]
+    Gradient(Vec<char>),
+}
+
+fn fg(color: &Pixel) -> String {
+    format!(
+        "\x1B[38;2;{};{};{}m",
+        (color.channels()[0] * 255.0) as u8,
+        (color.channels()[1] * 255.0) as u8,
+        (color.channels()[2] * 255.0) as u8,
+    )
+}
+
+fn bg(color: &Pixel) -> String {
+    format!(
+        "\x1B[48;2;{};{};{}m",
+        (color.channels()[0] * 255.0) as u8,
+        (color.channels()[1] * 255.0) as u8,
+        (color.channels()[2] * 255.0) as u8,
+    )
+}
+
+impl Style {
+    fn apply(&self, top: &Pixel, bottom: Option<&Pixel>) -> String {
+        let mut string = String::default();
+        match self {
+            Self::Default => {
+                string += &fg(top);
+                if let Some(lower) = bottom {
+                    string += &bg(lower);
+                }
+                string += "▀\x1B[0m";
+            }
+            Self::Gradient(gradient) => {
+                let mut avg = top.0;
+                if let Some(bottom) = bottom {
+                    for i in 0..3 {
+                        avg[i] = (avg[i] + bottom.channels()[i]) / 2.0;
+                    }
+                }
+                let avg = Pixel::from(avg);
+                let b = brightness(&avg);
+                let char_index = ((gradient.len() - 1) as f32 * b) as usize;
+                string += &format!("{}\x1B[0m", gradient[char_index]);
+            }
+            Self::Greyscale => {
+                let b = brightness(&top);
+                string += &fg(&Pixel::from([b, b, b]));
+
+                if let Some(lower) = bottom {
+                    let b = brightness(lower);
+                    string += &bg(&Pixel::from([b, b, b]));
+                }
+                string += "▀\x1B[0m";
+            }
+        }
+        string
+    }
+}
 
 #[derive(clap::Parser, Debug)]
 struct Args {
@@ -11,6 +89,16 @@ struct Args {
     /// Optional display width.
     #[clap(short, long, default_value = "80")]
     width: u32,
+
+    /// Optional display style.
+    #[clap(short, long, group = "display_style")]
+    style: Option<Style>,
+
+    /// Gradient string to use.
+    /// First is darkest, right is the lightest color.
+    /// Cannot be combined with another style.
+    #[clap(short, long, group = "display_style")]
+    gradient: Option<String>,
 }
 
 #[derive(Debug)]
@@ -30,28 +118,14 @@ impl Display for Error {
 
 impl std::error::Error for Error {}
 
-fn build_display_string(image: &DynamicImage) -> String {
+fn build_display_string(image: &DynamicImage, style: &Style) -> String {
+    let image = image.to_rgb32f();
     let mut string = String::default();
     for y in (0..image.height()).step_by(2) {
         for x in 0..image.width() {
-            let upper = image.get_pixel(x, y);
-            string += &format!(
-                "\x1B[38;2;{};{};{}m",
-                upper.channels()[0],
-                upper.channels()[1],
-                upper.channels()[2]
-            );
-
-            if y + 1 < image.height() {
-                let lower = image.get_pixel(x, y + 1);
-                string += &format!(
-                    "\x1B[48;2;{};{};{}m",
-                    lower.channels()[0],
-                    lower.channels()[1],
-                    lower.channels()[2]
-                );
-            }
-            string += "▀\x1B[0m";
+            let top = image.get_pixel(x, y);
+            let bottom = image.get_pixel_checked(x, y + 1);
+            string += &style.apply(top, bottom);
         }
         string += "\n";
     }
@@ -65,19 +139,24 @@ fn resize(image: DynamicImage, width: u32) -> DynamicImage {
     image.resize(width, h, FilterType::Gaussian)
 }
 
-fn display_image(path: &str, width: u32) -> Result<(), Error> {
+fn display_image(path: &str, width: u32, style: &Style) -> Result<(), Error> {
     let reader = ImageReader::open(path).map_err(Error::IO)?;
     let image = reader.decode().map_err(Error::Decode)?;
     let image = resize(image, width);
-    let string = build_display_string(&image);
+    let string = build_display_string(&image, style);
     println!("{path}:\n{}", string);
     Ok(())
 }
 
 fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    if let Some(gradient) = args.gradient {
+        let gradient = gradient.chars().collect();
+        args.style = Some(Style::Gradient(gradient));
+    }
+    let style = args.style.unwrap_or_default();
     for filename in &args.filenames {
-        match display_image(filename, args.width) {
+        match display_image(filename, args.width, &style) {
             Ok(_) => (),
             Err(err) => println!("{filename}: {err}"),
         }
