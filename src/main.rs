@@ -1,11 +1,12 @@
 use clap::Parser;
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageReader, Pixel, Rgba};
+use std::fmt::{Display, Formatter};
 
 #[derive(clap::Parser, Debug)]
 struct Args {
-    /// Path to image to display.
-    filename: String,
+    /// Files to display.
+    filenames: Vec<String>,
 
     /// Optional display width.
     #[clap(short, long, default_value = "80")]
@@ -17,6 +18,17 @@ enum Error {
     IO(std::io::Error),
     Decode(image::ImageError),
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IO(err) => write!(f, "{err}"),
+            Self::Decode(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 fn build_display_string(image: &DynamicImage) -> String {
     let mut string = String::default();
@@ -58,14 +70,16 @@ fn display_image(path: &str, width: u32) -> Result<(), Error> {
     let image = reader.decode().map_err(Error::Decode)?;
     let image = resize(image, width);
     let string = build_display_string(&image);
-    println!("Your image:\n{}", string);
+    println!("{path}:\n{}", string);
     Ok(())
 }
 
 fn main() {
     let args = Args::parse();
-    match display_image(&args.filename, args.width) {
-        Ok(_) => (),
-        Err(err) => panic!("error: {err:?}"),
+    for filename in &args.filenames {
+        match display_image(filename, args.width) {
+            Ok(_) => (),
+            Err(err) => println!("{filename}: {err}"),
+        }
     }
 }
