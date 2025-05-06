@@ -20,11 +20,8 @@ from [Wikipedia](https://en.wikipedia.org/wiki/File:Duck-billed_platypus_(Ornith
 taken by [Charles J. Sharp](https://www.wikidata.org/wiki/Q54800218) and distributed
 under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.en).
 
-## Licenses
-
-This crate uses [clap](https://crates.io/crates/clap) (MIT) and [image](https://crates.io/crates/image) (MIT OR
-Apache-2.0)
-and is itself licensed under MIT.
+Thanks to [clap](https://crates.io/crates/clap), [image](https://crates.io/crates/image)
+and [built](https://crates.io/crates/built) ❤️
 
 ## Contributing
 
