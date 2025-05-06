@@ -10,6 +10,25 @@ fn brightness(pixel: &Pixel) -> f32 {
     0.299 * pixel.channels()[0] + 0.587 * pixel.channels()[1] + 0.114 * pixel.channels()[2]
 }
 
+#[derive(Debug, Default, Copy, Clone, clap::ValueEnum)]
+enum Filter {
+    /// Nearest Neighbor
+    Nearest,
+
+    /// Linear Filter
+    Triangle,
+
+    /// Cubic Filter
+    CatmullRom,
+
+    /// Gaussian Filter
+    #[default]
+    Gaussian,
+
+    /// Lanczos with window 3
+    Lanczos3,
+}
+
 /// Display style.
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 enum Style {
@@ -90,6 +109,10 @@ struct Args {
     #[clap(short, long, default_value = "80")]
     width: u32,
 
+    /// Optional filter to use for scaling.
+    #[clap(short, long)]
+    filter: Option<Filter>,
+
     /// Optional display style.
     #[clap(short, long, group = "display_style")]
     style: Option<Style>,
@@ -132,17 +155,24 @@ fn build_display_string(image: &DynamicImage, style: &Style) -> String {
     string
 }
 
-fn resize(image: DynamicImage, width: u32) -> DynamicImage {
+fn resize(image: DynamicImage, width: u32, filter: Filter) -> DynamicImage {
+    let filter = match filter {
+        Filter::Nearest => FilterType::Nearest,
+        Filter::Triangle => FilterType::Triangle,
+        Filter::CatmullRom => FilterType::CatmullRom,
+        Filter::Gaussian => FilterType::Gaussian,
+        Filter::Lanczos3 => FilterType::Lanczos3,
+    };
     let (w, h) = image.dimensions();
     let scale = width as f64 / w as f64;
     let h = (scale * h as f64) as u32;
-    image.resize(width, h, FilterType::Gaussian)
+    image.resize(width, h, filter)
 }
 
-fn display_image(path: &str, width: u32, style: &Style) -> Result<(), Error> {
+fn display_image(path: &str, width: u32, style: &Style, filter: Filter) -> Result<(), Error> {
     let reader = ImageReader::open(path).map_err(Error::IO)?;
     let image = reader.decode().map_err(Error::Decode)?;
-    let image = resize(image, width);
+    let image = resize(image, width, filter);
     let string = build_display_string(&image, style);
     println!("{path}:\n{}", string);
     Ok(())
@@ -155,8 +185,9 @@ fn main() {
         args.style = Some(Style::Gradient(gradient));
     }
     let style = args.style.unwrap_or_default();
+    let filter = args.filter.unwrap_or_default();
     for filename in &args.filenames {
-        match display_image(filename, args.width, &style) {
+        match display_image(filename, args.width, &style, filter) {
             Ok(_) => (),
             Err(err) => println!("{filename}: {err}"),
         }
