@@ -1,7 +1,10 @@
 [package]
-name = "view"
+name = "ttview"
 version = "0.1.0"
 edition = "2024"
+description = "Terminal Image Viewer"
+license = "MIT"
+license-file = "LICENSE"
 
 [dependencies]
 clap = { version = "4.5.37", features = ["derive"] }

@@ -990,6 +990,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ttview"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "image",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1017,14 +1025,6 @@ name = "version-compare"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "852e951cb7832cb45cb1169900d19760cfa39b82bc0ea9c0e5a14ae88411c98b"
-
-[[package]]
-name = "view"
-version = "0.1.0"
-dependencies = [
- "clap",
- "image",
-]
 
 [[package]]
 name = "wasi"
