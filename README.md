@@ -3,6 +3,8 @@
 This application displays images by changing the text color and displaying U+2580 ("▀", Upper half block).
 Images are resized to fit with a default width of 80 characters.
 
+![Example](example.png)
+
 ## Usage
 
 Display an image: `ttview path/to/image`.  
