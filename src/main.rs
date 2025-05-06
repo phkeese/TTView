@@ -1,104 +1,15 @@
 use clap::Parser;
-use image::imageops::FilterType;
-use image::{DynamicImage, GenericImageView, ImageReader, Pixel as ImagePixel, Rgb};
+use image::{DynamicImage, ImageReader, Rgb};
 use std::fmt::{Display, Formatter};
+
+mod resizing;
+mod styling;
+
+use resizing::*;
+use styling::*;
 
 /// Single pixel value.
 type Pixel = Rgb<f32>;
-
-fn brightness(pixel: &Pixel) -> f32 {
-    0.299 * pixel.channels()[0] + 0.587 * pixel.channels()[1] + 0.114 * pixel.channels()[2]
-}
-
-#[derive(Debug, Default, Copy, Clone, clap::ValueEnum)]
-enum Filter {
-    /// Nearest Neighbor
-    Nearest,
-
-    /// Linear Filter
-    Triangle,
-
-    /// Cubic Filter
-    CatmullRom,
-
-    /// Gaussian Filter
-    #[default]
-    Gaussian,
-
-    /// Lanczos with window 3
-    Lanczos3,
-}
-
-/// Display style.
-#[derive(Debug, Default, Clone, clap::ValueEnum)]
-enum Style {
-    /// Default style, 24 bit color with upper half block character.
-    #[default]
-    Default,
-
-    /// Greyscale style, uses a weighted average for the final pixel value.
-    Greyscale,
-
-    /// Display in greyscale using a gradient.
-    #[clap(skip)]
-    Gradient(Vec<char>),
-}
-
-fn fg(color: &Pixel) -> String {
-    format!(
-        "\x1B[38;2;{};{};{}m",
-        (color.channels()[0] * 255.0) as u8,
-        (color.channels()[1] * 255.0) as u8,
-        (color.channels()[2] * 255.0) as u8,
-    )
-}
-
-fn bg(color: &Pixel) -> String {
-    format!(
-        "\x1B[48;2;{};{};{}m",
-        (color.channels()[0] * 255.0) as u8,
-        (color.channels()[1] * 255.0) as u8,
-        (color.channels()[2] * 255.0) as u8,
-    )
-}
-
-impl Style {
-    fn apply(&self, top: &Pixel, bottom: Option<&Pixel>) -> String {
-        let mut string = String::default();
-        match self {
-            Self::Default => {
-                string += &fg(top);
-                if let Some(lower) = bottom {
-                    string += &bg(lower);
-                }
-                string += "▀\x1B[0m";
-            }
-            Self::Gradient(gradient) => {
-                let mut avg = top.0;
-                if let Some(bottom) = bottom {
-                    for i in 0..3 {
-                        avg[i] = (avg[i] + bottom.channels()[i]) / 2.0;
-                    }
-                }
-                let avg = Pixel::from(avg);
-                let b = brightness(&avg);
-                let char_index = ((gradient.len() - 1) as f32 * b) as usize;
-                string += &format!("{}\x1B[0m", gradient[char_index]);
-            }
-            Self::Greyscale => {
-                let b = brightness(&top);
-                string += &fg(&Pixel::from([b, b, b]));
-
-                if let Some(lower) = bottom {
-                    let b = brightness(lower);
-                    string += &bg(&Pixel::from([b, b, b]));
-                }
-                string += "▀\x1B[0m";
-            }
-        }
-        string
-    }
-}
 
 #[derive(clap::Parser, Debug)]
 struct Args {
@@ -114,8 +25,8 @@ struct Args {
     filter: Option<Filter>,
 
     /// Optional display style.
-    #[clap(short, long, group = "display_style")]
-    style: Option<Style>,
+    #[clap(short, long, group = "display_style", default_value = "color")]
+    style: Style,
 
     /// Gradient string to use.
     /// First is darkest, right is the lightest color.
@@ -146,31 +57,8 @@ impl Display for Error {
 impl std::error::Error for Error {}
 
 fn build_display_string(image: &DynamicImage, style: &Style) -> String {
-    let image = image.to_rgb32f();
-    let mut string = String::default();
-    for y in (0..image.height()).step_by(2) {
-        for x in 0..image.width() {
-            let top = image.get_pixel(x, y);
-            let bottom = image.get_pixel_checked(x, y + 1);
-            string += &style.apply(top, bottom);
-        }
-        string += "\n";
-    }
-    string
-}
-
-fn resize(image: DynamicImage, width: u32, filter: Filter) -> DynamicImage {
-    let filter = match filter {
-        Filter::Nearest => FilterType::Nearest,
-        Filter::Triangle => FilterType::Triangle,
-        Filter::CatmullRom => FilterType::CatmullRom,
-        Filter::Gaussian => FilterType::Gaussian,
-        Filter::Lanczos3 => FilterType::Lanczos3,
-    };
-    let (w, h) = image.dimensions();
-    let scale = width as f64 / w as f64;
-    let h = (scale * h as f64) as u32;
-    image.resize(width, h, filter)
+    let mut image = image.to_rgb32f();
+    style.apply(&mut image)
 }
 
 fn display_image(path: &str, width: u32, style: &Style, filter: Filter) -> Result<(), Error> {
@@ -194,9 +82,9 @@ fn main() {
     }
     if let Some(gradient) = args.gradient {
         let gradient = gradient.chars().collect();
-        args.style = Some(Style::Gradient(gradient));
+        args.style = Style::Gradient(gradient);
     }
-    let style = args.style.unwrap_or_default();
+    let style = args.style;
     let filter = args.filter.unwrap_or_default();
     for filename in &args.filenames {
         match display_image(filename, args.width, &style, filter) {
